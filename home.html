@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exam Portal – Home</title>
+<style>
+*{box-sizing:border-box;font-family:Arial,sans-serif;font-size:13px}
+body{margin:0;background:#f0f0f0;color:#333}
+.top{background:#2b2b2b;color:#fff;padding:10px 15px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.top a{color:#ffcc00;margin-left:12px;text-decoration:none}
+.wrap{max-width:1000px;margin:15px auto;padding:0 10px}
+.crumb{font-size:12px;color:#666;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.crumb a{color:#33a6ea;cursor:pointer;text-decoration:none;font-weight:bold}
+h2{margin:0 0 10px;font-size:16px;color:#31708f}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tile{background:#fff;border:1px solid #ccc;border-radius:6px;padding:18px 12px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.tile:active{background:#eef6fc}
+.tile .ic{font-size:30px;display:block;margin-bottom:6px}
+.tile b{font-size:15px;display:block;color:#31708f}
+.tile span.s{display:block;margin-top:4px;font-size:11px;color:#666}
+.tile.bm{border-color:#f0ad4e}
+.card{background:#fff;border:1px solid #ccc;padding:12px;margin-bottom:12px;border-radius:4px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed #ddd}
+.row:last-child{border-bottom:0}
+.btn{padding:6px 14px;border:0;background:#33a6ea;color:#fff;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;font-weight:bold}
+.btn.g{background:#2e7d32}.btn.o{background:#f0ad4e}
+.empty{text-align:center;padding:22px;color:#777;line-height:1.7}
+.note{font-size:11px;color:#a94442;margin-bottom:8px}
+.tt{font-weight:bold;color:#31708f;margin:6px 0}
+.mut{color:#777;font-size:11px}
+</style></head><body>
+<div class="top">
+  <b>🏠 Online Exam Portal</b>
+  <span><a href="my-progress.html">📈 My Progress</a><a href="bookmarks.html">🔖 Bookmarks</a></span>
+</div>
+<div class="wrap">
+  <div id="note"></div>
+  <div class="crumb" id="crumb"></div>
+  <div id="view"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const enc=encodeURIComponent;
+
+// Built-in sample catalog (used only if tests.json cannot be loaded)
+const DEFAULT_CATALOG={
+  teaching:{NTT:{},PRT:{},TGT:{},PGT:{}},
+  nonTeaching:{'10th':{},'12th':{'Sample Post (edit in tests.json)':{'2024':[{title:'Sample Full Test 1',file:'questions.json'}]}},'Graduation Level':{}}
+};
+const STRUCT={
+  teaching:{label:'Teaching',hi:'शिक्षण',icon:'👩‍🏫',levels:['NTT','PRT','TGT','PGT']},
+  nonTeaching:{label:'Non-Teaching',hi:'गैर-शिक्षण',icon:'🏢',levels:['10th','12th','Graduation Level']}
+};
+let CAT=DEFAULT_CATALOG;
+const S={cat:null,level:null,post:null,year:null,type:null};
+const fileCache={};
+
+async function init(){
+  try{
+    const r=await fetch('tests.json');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    CAT=await r.json();
+  }catch(e){
+    CAT=DEFAULT_CATALOG;
+    $('note').innerHTML='<div class="note">tests.json नहीं मिली, इसलिए built-in sample list दिख रही है। (फ़ाइल को server/hosting से खोलें और tests.json उसी folder में रखें।)</div>';
+  }
+  render();
+}
+
+function getBookmarks(){try{return JSON.parse(localStorage.getItem('examBookmarks'))||[]}catch(e){return[]}}
+function getFile(f){
+  if(!fileCache[f])fileCache[f]=fetch(f).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()});
+  return fileCache[f];
+}
+
+function pick(k,v){
+  v=decodeURIComponent(v);
+  const order=['cat','level','post','year','type'];
+  S[k]=v;
+  for(let i=order.indexOf(k)+1;i<order.length;i++)S[order[i]]=null;
+  render();
+}
+function upTo(k){
+  const order=['cat','level','post','year','type'];
+  if(k===null){order.forEach(x=>S[x]=null)}
+  else for(let i=order.indexOf(k)+1;i<order.length;i++)S[order[i]]=null;
+  render();
+}
+
+function crumb(){
+  const parts=[`<a onclick="upTo(null)">🏠 Home</a>`];
+  if(S.cat)parts.push(`<a onclick="upTo('cat')">${esc(STRUCT[S.cat].label)}</a>`);
+  if(S.level)parts.push(`<a onclick="upTo('level')">${esc(S.level)}</a>`);
+  if(S.post)parts.push(`<a onclick="upTo('post')">${esc(S.post)}</a>`);
+  if(S.year)parts.push(`<a onclick="upTo('year')">${esc(S.year)}</a>`);
+  if(S.type)parts.push(`<b>${S.type==='full'?'Full Test':'Sectional Test'}</b>`);
+  $('crumb').innerHTML=parts.join(' › ');
+}
+
+function node(){return ((CAT[S.cat]||{})[S.level])||{}}
+
+function empty(msg){return `<div class="card empty">${msg}</div>`}
+
+function launchURL(t,title,section){
+  let u='index.html?file='+enc(t.file)+'&title='+enc(title||t.title);
+  if(section!==undefined)u+='&section='+section;
+  else if(t.duration)u+='&duration='+enc(t.duration);
+  return u;
+}
+
+function render(){
+  crumb();
+  const v=$('view');
+  // 1. Home
+  if(!S.cat){
+    const B=getBookmarks();
+    const subs=new Set(B.map(b=>b.subject)).size;
+    v.innerHTML=`<h2>Choose Test Category</h2><div class="tiles">
+      ${Object.keys(STRUCT).map(k=>`<div class="tile" onclick="pick('cat','${k}')"><span class="ic">${STRUCT[k].icon}</span><b>${STRUCT[k].label}</b><span class="s">${STRUCT[k].hi} • ${STRUCT[k].levels.join(', ')}</span></div>`).join('')}
+      <div class="tile bm" onclick="location.href='bookmarks.html'"><span class="ic">🔖</span><b>Bookmarks</b><span class="s">${B.length} saved • ${subs} subjects<br>Date-wise / Subject-wise / Practice as Test</span></div>
+    </div>`;
+    return;
+  }
+  // 2. Level
+  if(!S.level){
+    v.innerHTML=`<h2>${esc(STRUCT[S.cat].label)} – Select Level</h2><div class="tiles">
+      ${STRUCT[S.cat].levels.map(l=>{
+        const n=Object.keys((CAT[S.cat]||{})[l]||{}).length;
+        return `<div class="tile" onclick="pick('level','${enc(l)}')"><span class="ic">🎓</span><b>${esc(l)}</b><span class="s">${n} post${n===1?'':'s'}</span></div>`}).join('')}
+    </div>`;
+    return;
+  }
+  // 3. Post
+  if(!S.post){
+    const posts=Object.keys(node());
+    v.innerHTML=`<h2>${esc(S.level)} – Select Post</h2>`+(posts.length?`<div class="tiles">${posts.map(p=>`<div class="tile" onclick="pick('post','${enc(p)}')"><span class="ic">📋</span><b>${esc(p)}</b><span class="s">${Object.keys(node()[p]||{}).length} year(s)</span></div>`).join('')}</div>`:empty('अभी इस level में कोई post नहीं जोड़ी गई है।<br><span class="mut">tests.json में जोड़ें।</span>'));
+    return;
+  }
+  // 4. Year
+  if(!S.year){
+    const years=Object.keys(node()[S.post]||{}).sort((a,b)=>b.localeCompare(a));
+    v.innerHTML=`<h2>${esc(S.post)} – Select Year</h2>`+(years.length?`<div class="tiles">${years.map(y=>`<div class="tile" onclick="pick('year','${enc(y)}')"><span class="ic">📅</span><b>${esc(y)}</b><span class="s">${(node()[S.post][y]||[]).length} test(s)</span></div>`).join('')}</div>`:empty('कोई year नहीं मिला।'));
+    return;
+  }
+  const tests=(node()[S.post]||{})[S.year]||[];
+  // 5. Type
+  if(!S.type){
+    v.innerHTML=`<h2>${esc(S.post)} • ${esc(S.year)}</h2><div class="tiles">
+      <div class="tile" onclick="pick('type','full')"><span class="ic">📝</span><b>Full Test</b><span class="s">${tests.length} test(s)</span></div>
+      <div class="tile" onclick="pick('type','sectional')"><span class="ic">🧩</span><b>Sectional Test</b><span class="s">Section-wise practice</span></div>
+    </div>`;
+    return;
+  }
+  // 6a. Full tests
+  if(S.type==='full'){
+    v.innerHTML=`<h2>Full Tests</h2><div class="card">`+(tests.length?tests.map(t=>`<div class="row"><div><b>${esc(t.title)}</b>${t.duration?`<div class="mut">${esc(t.duration)} min</div>`:''}</div><a class="btn" href="${launchURL(t)}">Start Test</a></div>`).join(''):empty('इस year में कोई test नहीं है।'))+`</div>`;
+    return;
+  }
+  // 6b. Sectional tests
+  v.innerHTML=`<h2>Sectional Tests</h2>`+(tests.length?tests.map((t,i)=>`<div class="card"><div class="tt">${esc(t.title)}</div><div id="sec_${i}" class="mut">Loading sections…</div></div>`).join(''):empty('इस year में कोई test नहीं है।'));
+  tests.forEach((t,i)=>{
+    getFile(t.file).then(d=>{
+      const secs=(d.sections||[]).map((s,k)=>({s,k})).filter(x=>x.s.questions&&x.s.questions.length);
+      const el=$('sec_'+i);if(!el)return;
+      el.className='';
+      el.innerHTML=secs.map(({s,k})=>`<div class="row"><div><b>${esc(s.name)}</b><div class="mut">${s.questions.length} questions${s.nameHi?' • '+esc(s.nameHi):''}</div></div><a class="btn g" href="${launchURL(t,t.title+' – '+s.name,k)}">Start Section</a></div>`).join('')||'No sections found.';
+    }).catch(()=>{
+      const el=$('sec_'+i);if(el)el.innerHTML='<span style="color:#c00">Could not load '+esc(t.file)+'. Open via server/hosting.</span>';
+    });
+  });
+}
+init();
+</script>
+</body></html>
